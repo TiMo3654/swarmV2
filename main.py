@@ -1,5 +1,6 @@
 import random
 import matplotlib.pyplot as plt
+import math
 
 class ResponsiveModule:
     def __init__(self, module_id, position, width=10, height=10):
@@ -16,7 +17,7 @@ class ResponsiveModule:
         self.position = (int(round(position[0])), int(round(position[1])))  # Center (x, y)
         self.width = width
         self.height = height
-        self.orientation = 0  # Unused in this simple example but available for future extension
+        self.orientation = 0  # 0 or 90 degrees, in degrees
 
     def evaluate_conditions(self, environment):
         """
@@ -72,6 +73,149 @@ class ResponsiveModule:
         self.position = (int(round(x)), int(round(y)))
         print(f"Module {self.module_id} moved to position {self.position}")
 
+    def get_corners(self):
+        """
+        Returns the corners of the rectangle as a list of (x, y) tuples, considering orientation.
+        """
+        x, y = self.position
+        w, h = (self.width, self.height) if self.orientation % 180 == 0 else (self.height, self.width)
+        half_w, half_h = w / 2, h / 2
+        return [
+            (x - half_w, y - half_h),
+            (x + half_w, y - half_h),
+            (x + half_w, y + half_h),
+            (x - half_w, y + half_h)
+        ]
+
+    def get_bounds(self):
+        """
+        Returns (left, bottom, right, top) of the rectangle considering orientation.
+        """
+        corners = self.get_corners()
+        xs = [c[0] for c in corners]
+        ys = [c[1] for c in corners]
+        return (min(xs), min(ys), max(xs), max(ys))
+
+    def overlap_area_with(self, other):
+        """
+        Compute overlap area with another module, considering orientation.
+        Only supports axis-aligned rectangles (0 or 90 deg).
+        """
+        left1, bottom1, right1, top1 = self.get_bounds()
+        left2, bottom2, right2, top2 = other.get_bounds()
+        dx = min(right1, right2) - max(left1, left2)
+        dy = min(top1, top2) - max(bottom1, bottom2)
+        if dx > 0 and dy > 0:
+            return dx * dy
+        return 0
+
+    def overlap_with_environment(self, environment):
+        """
+        Returns the area of the module that extends beyond the environment boundary.
+        """
+        left, bottom, right, top = self.get_bounds()
+        min_x, min_y, max_x, max_y = environment.bounds
+        overlap = 0
+        # Overlap on left
+        if left < min_x:
+            overlap += (min_x - left) * (top - bottom)
+        # Overlap on right
+        if right > max_x:
+            overlap += (right - max_x) * (top - bottom)
+        # Overlap on bottom
+        if bottom < min_y:
+            overlap += (right - left) * (min_y - bottom)
+        # Overlap on top
+        if top > max_y:
+            overlap += (right - left) * (top - max_y)
+        return overlap
+
+    def choose_best_action(self, environment):
+        """
+        Decide whether to move (and in which direction) or rotate (by 90 deg) to reduce overlap or boundary extension.
+        Returns a tuple (action, value), where action is one of:
+        'move_right', 'move_left', 'move_up', 'move_down', 'rotate'
+        """
+        # Evaluate current overlap with modules and environment
+        current_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
+        current_boundary_overlap = self.overlap_with_environment(environment)
+
+        # Try rotation
+        self.orientation = (self.orientation + 90) % 180
+        rotated_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
+        rotated_boundary_overlap = self.overlap_with_environment(environment)
+        self.orientation = (self.orientation + 90) % 180  # revert to original
+
+        # If rotation reduces overlap or boundary extension, prefer rotation
+        if (rotated_overlap < current_overlap) or (rotated_boundary_overlap < current_boundary_overlap):
+            return ('rotate', 90)
+
+        # Otherwise, try moving in each direction by 1 unit and pick the best
+        best_action = None
+        best_score = (current_overlap + current_boundary_overlap)
+        directions = {
+            'move_right': (1, 0),
+            'move_left': (-1, 0),
+            'move_up': (0, 1),
+            'move_down': (0, -1)
+        }
+        orig_pos = self.position
+        for action, (dx, dy) in directions.items():
+            self.position = (orig_pos[0] + dx, orig_pos[1] + dy)
+            move_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
+            move_boundary_overlap = self.overlap_with_environment(environment)
+            score = move_overlap + move_boundary_overlap
+            if score < best_score:
+                best_score = score
+                best_action = (action, 1)
+            self.position = orig_pos  # revert
+
+        if best_action:
+            return best_action
+        # No improvement found
+        return (None, None)
+
+    def perform_best_action(self, environment):
+        """
+        Perform the best action (move or rotate) to reduce overlap or boundary extension.
+        """
+        action, value = self.choose_best_action(environment)
+        if action == 'rotate':
+            self.orientation = (self.orientation + 90) % 180
+            print(f"Module {self.module_id} rotated to {self.orientation} degrees")
+            return True
+        elif action in ['move_right', 'move_left', 'move_up', 'move_down']:
+            x, y = self.position
+            if action == 'move_right':
+                x += value
+            elif action == 'move_left':
+                x -= value
+            elif action == 'move_up':
+                y += value
+            elif action == 'move_down':
+                y -= value
+            self.position = (int(round(x)), int(round(y)))
+            print(f"Module {self.module_id} moved {action} to {self.position}")
+            return True
+        return False
+
+    def get_width_height(self):
+        """
+        Returns (width, height) considering orientation.
+        """
+        if self.orientation % 180 == 0:
+            return self.width, self.height
+        else:
+            return self.height, self.width
+
+    def get_plot_rect(self):
+        """
+        Returns (bottom_left_x, bottom_left_y, width, height) for plotting, considering orientation.
+        """
+        x, y = self.position
+        w, h = self.get_width_height()
+        return (x - w / 2, y - h / 2, w, h)
+
     def evaluate_free_space(self, environment):
         """
         Evaluate the largest axis-aligned rectangle centered at the module's position
@@ -87,14 +231,17 @@ class ResponsiveModule:
         bottom = min_env_y
         top = max_env_y
 
+        w, h = self.get_width_height()
+
         for other in environment.modules:
             if other is self:
                 continue
             ox, oy = other.position
-            o_left = ox - other.width / 2
-            o_right = ox + other.width / 2
-            o_bottom = oy - other.height / 2
-            o_top = oy + other.height / 2
+            ow, oh = other.get_width_height()
+            o_left = ox - ow / 2
+            o_right = ox + ow / 2
+            o_bottom = oy - oh / 2
+            o_top = oy + oh / 2
 
             # If the other module overlaps horizontally with this y, it may restrict left/right
             if o_bottom < y < o_top or (y == o_bottom or y == o_top):
@@ -119,46 +266,15 @@ class ResponsiveModule:
         left, bottom, right, top = self.evaluate_free_space(environment)
         center_x = (left + right) / 2
         center_y = (bottom + top) / 2
-        # Ensure integer positions
         self.position = (int(round(center_x)), int(round(center_y)))
         print(f"Module {self.module_id} centered to position {self.position}")
 
     def check_overlap_and_resolve(self, environment):
         """
-        Check for overlaps with other modules and move away to reduce overlap.
-        Moves the module by 1 unit in the direction away from the overlapping module's center.
-        Returns True if a move was made, False otherwise.
+        Try to resolve overlap or boundary extension by moving or rotating.
+        Returns True if an action was performed.
         """
-        moved = False
-        x, y = self.position
-        for other in environment.modules:
-            if other is self:
-                continue
-            ox, oy = other.position
-            # Check for overlap
-            if (abs(x - ox) < (self.width + other.width) / 2) and (abs(y - oy) < (self.height + other.height) / 2):
-                # Compute direction to move away
-                dx = x - ox
-                dy = y - oy
-                # If dx or dy is zero, pick a random direction to avoid sticking
-                if dx == 0 and dy == 0:
-                    dx = random.choice([-1, 1])
-                    dy = random.choice([-1, 1])
-                elif dx == 0:
-                    dx = random.choice([-1, 1])
-                elif dy == 0:
-                    dy = random.choice([-1, 1])
-                # Normalize direction to unit step
-                step_x = int(round(dx / abs(dx))) if dx != 0 else 0
-                step_y = int(round(dy / abs(dy))) if dy != 0 else 0
-                # Move by 1 unit in each direction away from the overlap
-                x += step_x
-                y += step_y
-                moved = True
-        if moved:
-            self.position = (int(round(x)), int(round(y)))
-            print(f"Module {self.module_id} moved to reduce overlap: {self.position}")
-        return moved
+        return self.perform_best_action(environment)
 
 class Environment:
     def __init__(self, bounds):
@@ -216,14 +332,14 @@ class Environment:
 
         # Draw each module.
         for module in self.modules:
-            x, y = module.position
-            # Compute the bottom-left corner for the rectangle.
-            bl_corner = (x - module.width / 2, y - module.height / 2)
-            mod_rect = plt.Rectangle(bl_corner, module.width, module.height,
+            # Use orientation-aware plotting
+            bl_x, bl_y, w, h = module.get_plot_rect()
+            mod_rect = plt.Rectangle((bl_x, bl_y), w, h,
                                      color='red', alpha=0.6)
             ax.add_patch(mod_rect)
             # Optionally, add annotations.
-            ax.annotate(str(module.module_id), (x, y), color='black', weight='bold',
+            x, y = module.position
+            ax.annotate(f"{module.module_id}\n{module.orientation}°", (x, y), color='black', weight='bold',
                         fontsize=10, ha="center", va="center")
         
         # Always use the initial bounds for axis limits to keep scaling fixed
@@ -232,43 +348,52 @@ class Environment:
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
 
-    def plot_overlap_bars(self, ax):
+    def plot_overlap_bars(self, ax_overlap, ax_outside=None, show_outside=False):
         """
         Plot a live bar chart showing the normalized overlap area (0..1) for each module.
+        If show_outside and ax_outside is given, also plot the normalized area outside the boundary.
         """
-        ax.clear()
+        ax_overlap.clear()
         overlaps = []
         labels = []
+        outsides = []
         for i, module in enumerate(self.modules):
             overlap_area = 0
             x1, y1 = module.position
-            w1, h1 = module.width, module.height
+            w1, h1 = module.get_width_height()
             area1 = w1 * h1
             for j, other in enumerate(self.modules):
                 if module is other:
                     continue
-                x2, y2 = other.position
-                w2, h2 = other.width, other.height
-                # Calculate overlap in x and y
-                dx = min(x1 + w1/2, x2 + w2/2) - max(x1 - w1/2, x2 - w2/2)
-                dy = min(y1 + h1/2, y2 + h2/2) - max(y1 - h1/2, y2 - h2/2)
-                if dx > 0 and dy > 0:
-                    overlap_area += dx * dy
-            # Normalize by module's own area, clamp to [0, 1]
+                overlap_area += module.overlap_area_with(other)
             normalized_overlap = min(overlap_area / area1, 1.0) if area1 > 0 else 0
             overlaps.append(normalized_overlap)
             labels.append(str(module.module_id))
-        ax.bar(labels, overlaps, color='orange')
-        ax.set_ylabel("Normalized Overlap (0..1)")
-        ax.set_xlabel("Module ID")
-        ax.set_title("Normalized Overlap per Module")
-        ax.set_ylim(0, 1)
+
+            if show_outside and ax_outside is not None:
+                outside_area = module.overlap_with_environment(self)
+                normalized_outside = min(outside_area / area1, 1.0) if area1 > 0 else 0
+                outsides.append(normalized_outside)
+
+        ax_overlap.bar(labels, overlaps, color='orange')
+        ax_overlap.set_ylabel("Normalized Overlap (0..1)")
+        ax_overlap.set_xlabel("Module ID")
+        ax_overlap.set_title("Normalized Overlap per Module")
+        ax_overlap.set_ylim(0, 1)
+
+        if show_outside and ax_outside is not None:
+            ax_outside.clear()
+            ax_outside.bar(labels, outsides, color='blue')
+            ax_outside.set_ylabel("Normalized Outside Area (0..1)")
+            ax_outside.set_xlabel("Module ID")
+            ax_outside.set_title("Normalized Area Outside Boundary")
+            ax_outside.set_ylim(0, 1)
 
 class SimulationEngine:
     def __init__(self, environment):
         self.environment = environment
 
-    def run(self, steps=10, plot=False, pause_time=0.5, plot_overlap=False):
+    def run(self, steps=10, plot=False, pause_time=0.5, plot_overlap=False, plot_outside=False):
         """
         Run the simulation for a specified number of steps.
 
@@ -277,16 +402,21 @@ class SimulationEngine:
           plot: If True, update and display an interactive plot at each step.
           pause_time: Delay in seconds between simulation steps in plotting mode.
           plot_overlap: If True, show a live bar chart of overlap per module.
+          plot_outside: If True, show a live bar chart of outside area per module.
         """
-        if plot and plot_overlap:
+        if plot and plot_overlap and plot_outside:
+            plt.ion()
+            fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
+        elif plot and plot_overlap:
             plt.ion()
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+            ax3 = None
         elif plot:
             plt.ion()
             fig, ax1 = plt.subplots(figsize=(6, 6))
-            ax2 = None
+            ax2 = ax3 = None
         else:
-            ax1 = ax2 = None
+            ax1 = ax2 = ax3 = None
 
         prev_positions = None
         unchanged_count = 0
@@ -324,8 +454,13 @@ class SimulationEngine:
                 self.environment.plot_state(ax1)
                 ax1.set_title(f"SWARM Simulation - Step {step + 1}")
                 if plot_overlap and ax2 is not None:
-                    self.environment.plot_overlap_bars(ax2)
-                    ax2.set_title(f"Overlap per Module - Step {step + 1}")
+                    if plot_outside and ax3 is not None:
+                        self.environment.plot_overlap_bars(ax2, ax3, show_outside=True)
+                        ax2.set_title(f"Overlap per Module - Step {step + 1}")
+                        ax3.set_title(f"Outside Area per Module - Step {step + 1}")
+                    else:
+                        self.environment.plot_overlap_bars(ax2, show_outside=False)
+                        ax2.set_title(f"Overlap per Module - Step {step + 1}")
                 fig.canvas.draw_idle()
                 plt.pause(pause_time)
 
@@ -347,4 +482,4 @@ if __name__ == "__main__":
         env.add_module(module)
         
     engine = SimulationEngine(environment=env)
-    engine.run(steps=100, plot=True, plot_overlap=True, pause_time=0.2)
+    engine.run(steps=100, plot=True, plot_overlap=True, plot_outside=True, pause_time=0.2)
