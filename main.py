@@ -132,9 +132,10 @@ class ResponsiveModule:
 
     def choose_best_action(self, environment):
         """
-        Decide whether to move (and in which direction) or rotate (by 90 deg) to reduce overlap or boundary extension.
+        Decide whether to move (and in which direction), rotate (by 90 deg), or center in free space
+        to reduce overlap or boundary extension.
         Returns a tuple (action, value), where action is one of:
-        'move_right', 'move_left', 'move_up', 'move_down', 'rotate'
+        'move_right', 'move_left', 'move_up', 'move_down', 'rotate', 'center'
         """
         # Evaluate current overlap with modules and environment
         current_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
@@ -150,6 +151,19 @@ class ResponsiveModule:
         if (rotated_overlap < current_overlap) or (rotated_boundary_overlap < current_boundary_overlap):
             return ('rotate', 90)
 
+        # Try centering in free space
+        orig_pos = self.position
+        left, bottom, right, top = self.evaluate_free_space(environment)
+        center_x = (left + right) / 2
+        center_y = (bottom + top) / 2
+        self.position = (int(round(center_x)), int(round(center_y)))
+        center_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
+        center_boundary_overlap = self.overlap_with_environment(environment)
+        self.position = orig_pos  # revert
+
+        if (center_overlap < current_overlap) or (center_boundary_overlap < current_boundary_overlap):
+            return ('center', (int(round(center_x)), int(round(center_y))))
+
         # Otherwise, try moving in each direction by 1 unit and pick the best
         best_action = None
         best_score = (current_overlap + current_boundary_overlap)
@@ -159,7 +173,6 @@ class ResponsiveModule:
             'move_up': (0, 1),
             'move_down': (0, -1)
         }
-        orig_pos = self.position
         for action, (dx, dy) in directions.items():
             self.position = (orig_pos[0] + dx, orig_pos[1] + dy)
             move_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
@@ -177,7 +190,7 @@ class ResponsiveModule:
 
     def perform_best_action(self, environment):
         """
-        Perform the best action (move or rotate) to reduce overlap or boundary extension.
+        Perform the best action (move, rotate, or center) to reduce overlap or boundary extension.
         """
         action, value = self.choose_best_action(environment)
         if action == 'rotate':
@@ -196,6 +209,10 @@ class ResponsiveModule:
                 y -= value
             self.position = (int(round(x)), int(round(y)))
             print(f"Module {self.module_id} moved {action} to {self.position}")
+            return True
+        elif action == 'center':
+            self.position = value
+            print(f"Module {self.module_id} centered to position {self.position}")
             return True
         return False
 
@@ -426,15 +443,15 @@ class SimulationEngine:
             # Store current positions before update
             current_positions = tuple((module.module_id, module.position) for module in self.environment.modules)
 
-            # First, resolve overlaps
+            # Only resolve overlaps, moving, rotating, or centering if it improves the situation
             overlap_resolved = False
             for module in self.environment.modules:
                 if module.check_overlap_and_resolve(self.environment):
                     overlap_resolved = True
 
-            # Center each module in its free space.
-            for module in self.environment.modules:
-                module.center_in_free_space(self.environment)
+            # Remove centering in every round
+            # for module in self.environment.modules:
+            #     module.center_in_free_space(self.environment)
             self.environment.update()
 
             # Check if positions are unchanged from previous round
