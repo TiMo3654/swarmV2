@@ -130,10 +130,10 @@ class ResponsiveModule:
 
     def choose_best_action(self, environment):
         """
-        Decide whether to move (and in which direction), rotate (by 90 deg), or center in free space
-        to reduce overlap or boundary extension.
+        Decide whether to move (and in which direction), rotate (by 90 deg), center in free space,
+        or evade to a boundary corner to reduce overlap or boundary extension.
         Returns a tuple (action, value), where action is one of:
-        'move_right', 'move_left', 'move_up', 'move_down', 'rotate', 'center'
+        'move_right', 'move_left', 'move_up', 'move_down', 'rotate', 'center', 'evasion'
         """
         # Evaluate current overlap with modules and environment
         current_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
@@ -145,8 +145,14 @@ class ResponsiveModule:
         rotated_boundary_overlap = self.overlap_with_environment(environment)
         self.orientation = (self.orientation + 90) % 180  # revert to original
 
-        # If rotation reduces overlap or boundary extension, prefer rotation
-        if (rotated_overlap < current_overlap) or (rotated_boundary_overlap < current_boundary_overlap):
+        # Prefer boundary breach less than overlap: boundary breach is worse
+        def score(overlap, boundary):
+            # If boundary is breached, add a large penalty
+            if boundary > 0:
+                return 1e6 + boundary + overlap
+            return overlap
+
+        if score(rotated_overlap, rotated_boundary_overlap) < score(current_overlap, current_boundary_overlap):
             return ('rotate', 90)
 
         # Try centering in free space
@@ -159,12 +165,38 @@ class ResponsiveModule:
         center_boundary_overlap = self.overlap_with_environment(environment)
         self.position = orig_pos  # revert
 
-        if (center_overlap < current_overlap) or (center_boundary_overlap < current_boundary_overlap):
+        if score(center_overlap, center_boundary_overlap) < score(current_overlap, current_boundary_overlap):
             return ('center', (int(round(center_x)), int(round(center_y))))
+
+        # Try evasion to the better of two neighbouring boundary corners
+        min_x, min_y, max_x, max_y = environment.bounds
+        w, h = self.get_width_height()
+        corners = [
+            (min_x + w / 2, min_y + h / 2),  # bottom-left
+            (max_x - w / 2, min_y + h / 2),  # bottom-right
+            (max_x - w / 2, max_y - h / 2),  # top-right
+            (min_x + w / 2, max_y - h / 2),  # top-left
+        ]
+        x0, y0 = self.position
+        corners_sorted = sorted(corners, key=lambda c: (c[0] - x0) ** 2 + (c[1] - y0) ** 2)
+        best_evasion = None
+        best_evasion_score = float('inf')
+        for corner in corners_sorted[:2]:
+            self.position = (int(round(corner[0])), int(round(corner[1])))
+            evasion_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
+            evasion_boundary_overlap = self.overlap_with_environment(environment)
+            s = score(evasion_overlap, evasion_boundary_overlap)
+            if s < best_evasion_score:
+                best_evasion_score = s
+                best_evasion = (int(round(corner[0])), int(round(corner[1])))
+        self.position = orig_pos  # revert
+
+        if best_evasion is not None and best_evasion_score < score(current_overlap, current_boundary_overlap):
+            return ('evasion', best_evasion)
 
         # Otherwise, try moving in each direction by 1 unit and pick the best
         best_action = None
-        best_score = (current_overlap + current_boundary_overlap)
+        best_score = score(current_overlap, current_boundary_overlap)
         directions = {
             'move_right': (1, 0),
             'move_left': (-1, 0),
@@ -175,9 +207,9 @@ class ResponsiveModule:
             self.position = (orig_pos[0] + dx, orig_pos[1] + dy)
             move_overlap = sum(self.overlap_area_with(other) for other in environment.modules if other is not self)
             move_boundary_overlap = self.overlap_with_environment(environment)
-            score = move_overlap + move_boundary_overlap
-            if score < best_score:
-                best_score = score
+            s = score(move_overlap, move_boundary_overlap)
+            if s < best_score:
+                best_score = s
                 best_action = (action, 1)
             self.position = orig_pos  # revert
 
@@ -188,7 +220,7 @@ class ResponsiveModule:
 
     def perform_best_action(self, environment):
         """
-        Perform the best action (move, rotate, or center) to reduce overlap or boundary extension.
+        Perform the best action (move, rotate, center, or evasion) to reduce overlap or boundary extension.
         """
         action, value = self.choose_best_action(environment)
         if action == 'rotate':
@@ -211,6 +243,10 @@ class ResponsiveModule:
         elif action == 'center':
             self.position = value
             print(f"Module {self.module_id} centered to position {self.position}")
+            return True
+        elif action == 'evasion':
+            self.position = value
+            print(f"Module {self.module_id} evaded to boundary corner at {self.position}")
             return True
         return False
 
@@ -279,3 +315,20 @@ class ResponsiveModule:
         Returns True if an action was performed.
         """
         return self.perform_best_action(environment)
+
+    def is_fully_inside_environment(self, environment):
+        """
+        Returns True if the module is completely inside the environment boundary.
+        """
+        left, bottom, right, top = self.get_bounds()
+        min_x, min_y, max_x, max_y = environment.bounds
+        return left >= min_x and right <= max_x and bottom >= min_y and top <= max_y
+
+    def is_overlap_free(self, environment):
+        """
+        Returns True if the module does not overlap with any other module.
+        """
+        for other in environment.modules:
+            if other is not self and self.overlap_area_with(other) > 0:
+                return False
+        return True

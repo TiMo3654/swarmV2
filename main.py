@@ -3,6 +3,9 @@ from module import ResponsiveModule
 from environment import Environment
 from engine import SimulationEngine
 
+# Set random seed for reproducibility
+random.seed(42)
+
 if __name__ == "__main__":
     # Define the environment bounds as (min_x, min_y, max_x, max_y).
     env = Environment(bounds=(0, 0, 100, 100))
