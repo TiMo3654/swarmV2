@@ -410,7 +410,7 @@ class SimulationEngine:
     def __init__(self, environment):
         self.environment = environment
 
-    def run(self, steps=10, plot=False, pause_time=0.5, plot_overlap=False, plot_outside=False):
+    def run(self, steps=10, plot=False, pause_time=0.5, plot_overlap=False, plot_outside=False, plot_action_history=False):
         """
         Run the simulation for a specified number of steps.
 
@@ -420,20 +420,58 @@ class SimulationEngine:
           pause_time: Delay in seconds between simulation steps in plotting mode.
           plot_overlap: If True, show a live bar chart of overlap per module.
           plot_outside: If True, show a live bar chart of outside area per module.
+          plot_action_history: If True, show a line plot of action history per module.
         """
-        if plot and plot_overlap and plot_outside:
-            plt.ion()
-            fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
-        elif plot and plot_overlap:
-            plt.ion()
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-            ax3 = None
+        # --- Setup for action tracking and plotting ---
+        action_options = ['move_right', 'move_left', 'move_up', 'move_down', 'rotate', 'center', None]
+        action_to_idx = {a: i for i, a in enumerate(action_options)}
+        module_ids = [m.module_id for m in self.environment.modules]
+        action_history = {mid: [] for mid in module_ids}
+
+        # --- Setup plotting ---
+        if plot and plot_action_history:
+            if plot_overlap and plot_outside:
+                plt.ion()
+                # 2 rows, 3 columns; bottom row: action history spans all columns
+                from matplotlib.gridspec import GridSpec
+                fig = plt.figure(figsize=(18, 10))
+                gs = GridSpec(2, 3, height_ratios=[3, 1])
+                ax1 = fig.add_subplot(gs[0, 0])
+                ax2 = fig.add_subplot(gs[0, 1])
+                ax3 = fig.add_subplot(gs[0, 2])
+                ax_action = fig.add_subplot(gs[1, :])
+            elif plot_overlap:
+                plt.ion()
+                from matplotlib.gridspec import GridSpec
+                fig = plt.figure(figsize=(12, 9))
+                gs = GridSpec(2, 2, height_ratios=[3, 1])
+                ax1 = fig.add_subplot(gs[0, 0])
+                ax2 = fig.add_subplot(gs[0, 1])
+                ax_action = fig.add_subplot(gs[1, :])
+                ax3 = None
+            else:
+                plt.ion()
+                from matplotlib.gridspec import GridSpec
+                fig = plt.figure(figsize=(6, 8))
+                gs = GridSpec(2, 1, height_ratios=[3, 1])
+                ax1 = fig.add_subplot(gs[0, 0])
+                ax_action = fig.add_subplot(gs[1, 0])
+                ax2 = ax3 = None
         elif plot:
-            plt.ion()
-            fig, ax1 = plt.subplots(figsize=(6, 6))
-            ax2 = ax3 = None
+            if plot_overlap and plot_outside:
+                plt.ion()
+                fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
+            elif plot_overlap:
+                plt.ion()
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+                ax3 = None
+            else:
+                plt.ion()
+                fig, ax1 = plt.subplots(figsize=(6, 6))
+                ax2 = ax3 = None
+            ax_action = None
         else:
-            ax1 = ax2 = ax3 = None
+            ax1 = ax2 = ax3 = ax_action = None
 
         prev_positions = None
         unchanged_count = 0
@@ -445,9 +483,16 @@ class SimulationEngine:
 
             # Only resolve overlaps, moving, rotating, or centering if it improves the situation
             overlap_resolved = False
+            # --- Track actions for each module ---
+            step_actions = {}
             for module in self.environment.modules:
-                if module.check_overlap_and_resolve(self.environment):
+                action, value = module.choose_best_action(self.environment)
+                step_actions[module.module_id] = action
+                if module.perform_best_action(self.environment):
                     overlap_resolved = True
+            # Store actions in history
+            for mid in module_ids:
+                action_history[mid].append(step_actions.get(mid, None))
 
             # Remove centering in every round
             # for module in self.environment.modules:
@@ -478,6 +523,24 @@ class SimulationEngine:
                     else:
                         self.environment.plot_overlap_bars(ax2, show_outside=False)
                         ax2.set_title(f"Overlap per Module - Step {step + 1}")
+
+                # --- Plot action history as a line plot if enabled ---
+                if plot_action_history and ax_action is not None:
+                    ax_action.clear()
+                    for mid in module_ids:
+                        y = [action_to_idx[a] for a in action_history[mid]]
+                        x = list(range(1, len(y) + 1))
+                        ax_action.plot(x, y, marker='o', label=f"Module {mid}")
+                    ax_action.set_yticks(list(range(len(action_options))))
+                    ax_action.set_yticklabels(action_options)
+                    ax_action.set_xlabel("Step")
+                    ax_action.set_ylabel("Action")
+                    ax_action.set_title("Action per Module per Step")
+                    # Move legend outside the plot area (right side)
+                    ax_action.legend(loc='center left', bbox_to_anchor=(1.01, 0.5), fontsize=8)
+                    ax_action.set_xlim(1, steps)
+                    ax_action.set_ylim(-0.5, len(action_options) - 0.5)
+
                 fig.canvas.draw_idle()
                 plt.pause(pause_time)
 
@@ -491,7 +554,7 @@ if __name__ == "__main__":
     env = Environment(bounds=(0, 0, 100, 100))
     
     # Create a few modules with specified width and height.
-    for i in range(5):
+    for i in range(8):
         # Place modules in a random location with some margin from the edge.
         pos = (random.randint(20, 80), random.randint(20, 80))
         # Ensure integer positions (already done by randint, but for clarity)
@@ -499,4 +562,4 @@ if __name__ == "__main__":
         env.add_module(module)
         
     engine = SimulationEngine(environment=env)
-    engine.run(steps=100, plot=True, plot_overlap=True, plot_outside=True, pause_time=0.2)
+    engine.run(steps=100, plot=True, plot_overlap=True, plot_outside=True, plot_action_history=True, pause_time=0.2)
