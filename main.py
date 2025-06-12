@@ -1,6 +1,5 @@
 import random
 import matplotlib.pyplot as plt
-import math
 
 class ResponsiveModule:
     def __init__(self, module_id, position, width=10, height=10):
@@ -275,17 +274,6 @@ class ResponsiveModule:
 
         return (left, bottom, right, top)
 
-    def center_in_free_space(self, environment):
-        """
-        Center the module within its free space as determined by evaluate_free_space.
-        Updates the module's position.
-        """
-        left, bottom, right, top = self.evaluate_free_space(environment)
-        center_x = (left + right) / 2
-        center_y = (bottom + top) / 2
-        self.position = (int(round(center_x)), int(round(center_y)))
-        print(f"Module {self.module_id} centered to position {self.position}")
-
     def check_overlap_and_resolve(self, environment):
         """
         Try to resolve overlap or boundary extension by moving or rotating.
@@ -311,12 +299,6 @@ class Environment:
         """
         Update global environment conditions if needed.
         Currently a placeholder.
-        """
-        pass
-
-    def check_global_constraints(self):
-        """
-        Placeholder for global constraint or collision checks among modules.
         """
         pass
 
@@ -374,12 +356,11 @@ class Environment:
         overlaps = []
         labels = []
         outsides = []
-        for i, module in enumerate(self.modules):
+        for module in self.modules:
             overlap_area = 0
-            x1, y1 = module.position
             w1, h1 = module.get_width_height()
             area1 = w1 * h1
-            for j, other in enumerate(self.modules):
+            for other in self.modules:
                 if module is other:
                     continue
                 overlap_area += module.overlap_area_with(other)
