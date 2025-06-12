@@ -27,7 +27,8 @@ class SimulationEngine:
                 plt.ion()
                 from matplotlib.gridspec import GridSpec
                 fig = plt.figure(figsize=(18, 12))
-                gs = GridSpec(3, 3, height_ratios=[3, 1, 1])
+                # Reduce upper row height by 30%: [2.1, 1, 1] and add vertical spacing
+                gs = GridSpec(3, 3, height_ratios=[2.1, 1, 1], hspace=0.5)
                 ax1 = fig.add_subplot(gs[0, 0])
                 ax2 = fig.add_subplot(gs[0, 1])
                 ax3 = fig.add_subplot(gs[0, 2])
@@ -37,7 +38,7 @@ class SimulationEngine:
                 plt.ion()
                 from matplotlib.gridspec import GridSpec
                 fig = plt.figure(figsize=(12, 12))
-                gs = GridSpec(3, 2, height_ratios=[3, 1, 1])
+                gs = GridSpec(3, 2, height_ratios=[2.1, 1, 1], hspace=0.5)
                 ax1 = fig.add_subplot(gs[0, 0])
                 ax2 = fig.add_subplot(gs[0, 1])
                 ax_action = fig.add_subplot(gs[1, :])
@@ -47,7 +48,7 @@ class SimulationEngine:
                 plt.ion()
                 from matplotlib.gridspec import GridSpec
                 fig = plt.figure(figsize=(6, 12))
-                gs = GridSpec(3, 1, height_ratios=[3, 1, 1])
+                gs = GridSpec(3, 1, height_ratios=[2.1, 1, 1], hspace=0.5)
                 ax1 = fig.add_subplot(gs[0, 0])
                 ax_action = fig.add_subplot(gs[1, 0])
                 ax_deadspace = fig.add_subplot(gs[2, 0])
@@ -91,14 +92,6 @@ class SimulationEngine:
             dead_space = boundary_area - modules_area
             dead_space_history.append(dead_space)
 
-            # Shrink bounds if all modules are overlap free and fully inside boundary
-            all_ok = all(
-                m.is_overlap_free(self.environment) and m.is_fully_inside_environment(self.environment)
-                for m in self.environment.modules
-            )
-            if all_ok:
-                self.environment.shrink_bounds(shrink_amount=1)
-
             if plot:
                 self.environment.plot_state(ax1)
                 ax1.set_title(f"SWARM Simulation - Step {step + 1}")
@@ -132,8 +125,21 @@ class SimulationEngine:
                     ax_deadspace.set_ylabel("Dead Space")
                     ax_deadspace.set_title("Dead Space (Boundary Area - Modules Area)")
                     ax_deadspace.set_xlim(1, steps)
+                    ax_deadspace.set_yscale('log')
+                    ax_deadspace.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
                 fig.canvas.draw_idle()
                 plt.pause(pause_time)
+
+            # Shrink bounds if all modules are overlap free and fully inside boundary
+            all_ok = all(
+                m.is_overlap_free(self.environment) and m.is_fully_inside_environment(self.environment)
+                for m in self.environment.modules
+            )
+            if all_ok:
+                # Save current simulation state as PNG before shrinking
+                if plot:
+                    fig.savefig(f"swarm_state_before_shrink_step.png", bbox_inches='tight')
+                self.environment.shrink_bounds(shrink_amount=1)
         if plot:
             plt.ioff()
             plt.show()

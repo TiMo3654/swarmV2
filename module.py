@@ -322,6 +322,8 @@ class ResponsiveModule:
         """
         left, bottom, right, top = self.get_bounds()
         min_x, min_y, max_x, max_y = environment.bounds
+        # The bounds are inclusive, so left >= min_x and right <= max_x, etc.
+        # However, if the module is exactly on the boundary (e.g. left == min_x), it is still considered inside.
         return left >= min_x and right <= max_x and bottom >= min_y and top <= max_y
 
     def is_overlap_free(self, environment):

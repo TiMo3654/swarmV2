@@ -52,8 +52,11 @@ class Environment:
             x, y = module.position
             ax.annotate(f"{module.module_id}\n{module.orientation}°", (x, y), color='black', weight='bold',
                         fontsize=10, ha="center", va="center")
-        ax.set_xlim(0 - 20, 100 + 20)
-        ax.set_ylim(0 - 20, 100 + 20)
+        # Set axis limits to match current boundary, with a small margin
+        margin_x = (max_x - min_x) * 0.1
+        margin_y = (max_y - min_y) * 0.1
+        ax.set_xlim(min_x - margin_x, max_x + margin_x)
+        ax.set_ylim(min_y - margin_y, max_y + margin_y)
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
 
