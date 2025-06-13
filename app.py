@@ -1,5 +1,4 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 import random
 from module import ResponsiveModule
 from environment import Environment
