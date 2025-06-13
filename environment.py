@@ -1,5 +1,3 @@
-import matplotlib.pyplot as plt
-
 class Environment:
     def __init__(self, bounds):
         """
@@ -39,60 +37,9 @@ class Environment:
         Plot the current state of the environment and its modules.
         Draws the environment boundary and each module as a rectangle.
         """
-        ax.clear()
-        min_x, min_y, max_x, max_y = self.bounds
-        env_rect = plt.Rectangle((min_x, min_y), max_x - min_x, max_y - min_y,
-                                 fill=False, edgecolor='blue', linewidth=2)
-        ax.add_patch(env_rect)
-        for module in self.modules:
-            bl_x, bl_y, w, h = module.get_plot_rect()
-            mod_rect = plt.Rectangle((bl_x, bl_y), w, h,
-                                     color='red', alpha=0.6)
-            ax.add_patch(mod_rect)
-            x, y = module.position
-            ax.annotate(f"{module.module_id}\n{module.orientation}°", (x, y), color='black', weight='bold',
-                        fontsize=10, ha="center", va="center")
-        # Set axis limits to match current boundary, with a small margin
-        margin_x = (max_x - min_x) * 0.1
-        margin_y = (max_y - min_y) * 0.1
-        ax.set_xlim(min_x - margin_x, max_x + margin_x)
-        ax.set_ylim(min_y - margin_y, max_y + margin_y)
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
+        # This function is only needed for local matplotlib development
+        pass
 
     def plot_overlap_bars(self, ax_overlap, ax_outside=None, show_outside=False):
-        """
-        Plot a live bar chart showing the normalized overlap area (0..1) for each module.
-        If show_outside and ax_outside is given, also plot the normalized area outside the boundary.
-        """
-        ax_overlap.clear()
-        overlaps = []
-        labels = []
-        outsides = []
-        for module in self.modules:
-            overlap_area = 0
-            w1, h1 = module.get_width_height()
-            area1 = w1 * h1
-            for other in self.modules:
-                if module is other:
-                    continue
-                overlap_area += module.overlap_area_with(other)
-            normalized_overlap = min(overlap_area / area1, 1.0) if area1 > 0 else 0
-            overlaps.append(normalized_overlap)
-            labels.append(str(module.module_id))
-            if show_outside and ax_outside is not None:
-                outside_area = module.overlap_with_environment(self)
-                normalized_outside = min(outside_area / area1, 1.0) if area1 > 0 else 0
-                outsides.append(normalized_outside)
-        ax_overlap.bar(labels, overlaps, color='orange')
-        ax_overlap.set_ylabel("Normalized Overlap (0..1)")
-        ax_overlap.set_xlabel("Module ID")
-        ax_overlap.set_title("Normalized Overlap per Module")
-        ax_overlap.set_ylim(0, 1)
-        if show_outside and ax_outside is not None:
-            ax_outside.clear()
-            ax_outside.bar(labels, outsides, color='blue')
-            ax_outside.set_ylabel("Normalized Outside Area (0..1)")
-            ax_outside.set_xlabel("Module ID")
-            ax_outside.set_title("Normalized Area Outside Boundary")
-            ax_outside.set_ylim(0, 1)
+        # This function is only needed for local matplotlib development
+        pass
