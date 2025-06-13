@@ -60,8 +60,15 @@ if start_sim:
             fig.add_shape(type="rect", x0=bl_x, y0=bl_y, x1=bl_x+w, y1=bl_y+h, fillcolor="red", opacity=0.6, line=dict(color="black", width=1), row=1, col=1)
             x, y = module.position
             fig.add_trace(go.Scatter(x=[x], y=[y], text=[f"{module.module_id}<br>{module.orientation}°"], mode="text", showlegend=False), row=1, col=1)
-        fig.update_xaxes(title_text="X", row=1, col=1, range=[0, 100])
-        fig.update_yaxes(title_text="Y", row=1, col=1, range=[0, 100])
+        # Set axis limits 20% larger than the initial boundary
+        margin_x = (100 - 0) * 0.1
+        margin_y = (100 - 0) * 0.1
+        axis_min_x = 0 - margin_x
+        axis_max_x = 100 + margin_x
+        axis_min_y = 0 - margin_y
+        axis_max_y = 100 + margin_y
+        fig.update_xaxes(title_text="X", row=1, col=1, range=[axis_min_x, axis_max_x], dtick=20)
+        fig.update_yaxes(title_text="Y", row=1, col=1, range=[axis_min_y, axis_max_y])
         fig.add_trace(go.Bar(x=labels, y=overlaps, marker_color='orange', name="Overlap"), row=1, col=2)
         fig.update_yaxes(title_text="Normalized Overlap (0..1)", row=1, col=2, range=[0,1])
         fig.update_xaxes(title_text="Module ID", row=1, col=2)
@@ -71,9 +78,10 @@ if start_sim:
         fig.update_layout(
             height=500,
             width=900,  # Set a constant width for the state plot
+            autosize=False,  # Prevent Plotly from resizing
             showlegend=False,
         )
-        plot_placeholder.plotly_chart(fig, use_container_width=True)
+        plot_placeholder.plotly_chart(fig, use_container_width=False)  # Do not allow container to override width
         fig2 = psub.make_subplots(rows=2, cols=1, shared_xaxes=False, vertical_spacing=0.15, subplot_titles=("Action per Module per Step", "Dead Space (Boundary Area - Modules Area)"))
         # Precompute the full x-axis for all steps
         x_full = list(range(1, steps + 1))
