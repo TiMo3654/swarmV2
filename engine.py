@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
+import time
 
 class SimulationEngine:
     def __init__(self, environment):
         self.environment = environment
 
-    def run(self, steps=10, plot=False, pause_time=0.5, plot_overlap=False, plot_outside=False, plot_action_history=False):
+    def run(self, steps=10, plot=False, pause_time=0.5, plot_overlap=False, plot_outside=False, plot_action_history=False, step_callback=None):
         """
         Run the simulation for a specified number of steps.
 
@@ -15,12 +16,15 @@ class SimulationEngine:
           plot_overlap: If True, show a live bar chart of overlap per module.
           plot_outside: If True, show a live bar chart of outside area per module.
           plot_action_history: If True, show a line plot of action history per module.
+          step_callback: Optional function called at the end of each step with simulation state and stats.
         """
         action_options = ['move_right', 'move_left', 'move_up', 'move_down', 'rotate', 'center', 'evasion', None]
         action_to_idx = {a: i for i, a in enumerate(action_options)}
         module_ids = [m.module_id for m in self.environment.modules]
         action_history = {mid: [] for mid in module_ids}
         dead_space_history = []
+        overlap_histories = {mid: [] for mid in module_ids}
+        outside_histories = {mid: [] for mid in module_ids}
 
         if plot and plot_action_history:
             if plot_overlap and plot_outside:
@@ -73,26 +77,53 @@ class SimulationEngine:
         prev_positions = None
 
         for step in range(steps):
-            print(f"\n--- Step {step + 1} ---")
             step_actions = {}
             for module in self.environment.modules:
                 action, value = module.choose_best_action(self.environment)
                 step_actions[module.module_id] = action
-                if module.perform_best_action(self.environment):
-                    overlap_resolved = True
+                module.perform_best_action(self.environment)
             for mid in module_ids:
                 action_history[mid].append(step_actions.get(mid, None))
             self.environment.update()
-            new_positions = tuple((module.module_id, module.position) for module in self.environment.modules)
-
             # Dead space calculation
             min_x, min_y, max_x, max_y = self.environment.bounds
             boundary_area = (max_x - min_x) * (max_y - min_y)
             modules_area = sum(m.get_width_height()[0] * m.get_width_height()[1] for m in self.environment.modules)
             dead_space = boundary_area - modules_area
             dead_space_history.append(dead_space)
-
-            if plot:
+            # Overlap and outside area
+            for module in self.environment.modules:
+                w1, h1 = module.get_width_height()
+                area1 = w1 * h1
+                overlap_area = sum(module.overlap_area_with(other) for other in self.environment.modules if other is not module)
+                normalized_overlap = min(overlap_area / area1, 1.0) if area1 > 0 else 0
+                overlap_histories[module.module_id].append(normalized_overlap)
+                outside_area = module.overlap_with_environment(self.environment)
+                normalized_outside = min(outside_area / area1, 1.0) if area1 > 0 else 0
+                outside_histories[module.module_id].append(normalized_outside)
+            # Shrink bounds if all modules are overlap free and fully inside boundary
+            all_ok = all(
+                m.is_overlap_free(self.environment) and m.is_fully_inside_environment(self.environment)
+                for m in self.environment.modules
+            )
+            if all_ok:
+                self.environment.shrink_bounds(shrink_amount=1)
+            # --- Callback for UI updates ---
+            if step_callback is not None:
+                step_callback({
+                    'step': step,
+                    'environment': self.environment,
+                    'action_history': action_history,
+                    'dead_space_history': dead_space_history,
+                    'overlap_histories': overlap_histories,
+                    'outside_histories': outside_histories,
+                    'action_options': action_options,
+                    'action_to_idx': action_to_idx,
+                    'module_ids': module_ids
+                })
+                if pause_time > 0:
+                    time.sleep(pause_time)
+            elif plot:
                 self.environment.plot_state(ax1)
                 ax1.set_title(f"SWARM Simulation - Step {step + 1}")
                 if plot_overlap and ax2 is not None:
@@ -130,16 +161,6 @@ class SimulationEngine:
                 fig.canvas.draw_idle()
                 plt.pause(pause_time)
 
-            # Shrink bounds if all modules are overlap free and fully inside boundary
-            all_ok = all(
-                m.is_overlap_free(self.environment) and m.is_fully_inside_environment(self.environment)
-                for m in self.environment.modules
-            )
-            if all_ok:
-                # Save current simulation state as PNG before shrinking
-                if plot:
-                    fig.savefig(f"swarm_state_before_shrink_step.png", bbox_inches='tight')
-                self.environment.shrink_bounds(shrink_amount=1)
         if plot:
             plt.ioff()
             plt.show()
