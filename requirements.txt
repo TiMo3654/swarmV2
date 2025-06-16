@@ -1,0 +1,7 @@
+streamlit
+plotly
+# The following are standard library, but listed for clarity
+# random
+# io
+# The following are not needed for Streamlit deployment:
+matplotlib
