@@ -91,7 +91,8 @@ if start_sim:
             fig2.add_trace(go.Scatter(x=x_full, y=y_padded, mode='lines+markers', name=f"Module {mid}"), row=1, col=1)
         fig2.update_yaxes(title_text="Action", tickvals=list(range(len(action_options))), ticktext=action_options, row=1, col=1, range=[-0.5, len(action_options)-0.5])
         fig2.update_xaxes(title_text="Step", row=1, col=1, range=[1, steps])
-        fig2.update_layout(height=700, width=900, autosize=False,)
+        # Always set a fixed height and width for fig2 to prevent resizing after simulation
+        fig2.update_layout(height=700, width=900, autosize=False)
         fig2.update_traces(showlegend=True, row=1, col=1)
         fig2.update_layout(legend=dict(yanchor="middle", y=0.5, xanchor="left", x=1.01, font=dict(size=10)))
         # Dead space plot, pad to steps
@@ -100,7 +101,7 @@ if start_sim:
         fig2.update_yaxes(title_text="Dead Space", type="log", row=2, col=1, tickformat=".0e", minallowed=1, autorange=False, range=[0, 4])
         fig2.update_xaxes(title_text="Step", row=2, col=1, range=[1, steps])
         fig2.update_traces(showlegend=False, row=2, col=1)
-        plot2_placeholder.plotly_chart(fig2, use_container_width=True)
+        plot2_placeholder.plotly_chart(fig2, use_container_width=False)
 
     engine.run(steps=steps, pause_time=pause_time, step_callback=streamlit_step_callback)
 else:
